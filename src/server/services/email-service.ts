@@ -3,8 +3,15 @@ import DeleteAccountVerificationEmail from "@/emails/delete-account-verification
 import EmailVerificationEmail from "@/emails/email-verification-email";
 import OrganizationInvitationEmail from "@/emails/organization-invitation-email";
 import ResetPasswordEmail from "@/emails/reset-password-email";
+import RetroRecapEmail from "@/emails/retro-recap-email";
 import { logger } from "@/libs/logger/logger";
 import { resend } from "@/libs/resend";
+import type {
+  DB_RetroActionItem,
+  DB_RetroFeedbackCard,
+  DB_RetroParticipant,
+  DB_RetroSession,
+} from "@/server/db/schema/retro";
 
 type ResetPasswordEmailParams = {
   user: { email: string };
@@ -125,4 +132,47 @@ export const sendOrganizationInvitationEmail = async ({
       teamName,
     }),
   });
+};
+
+type RetroRecapEmailParams = {
+  participants: DB_RetroParticipant[];
+  session: DB_RetroSession;
+  cards: DB_RetroFeedbackCard[];
+  actionItems: DB_RetroActionItem[];
+};
+
+export const sendRetroRecapEmail = async ({
+  participants,
+  session,
+  cards,
+  actionItems,
+}: RetroRecapEmailParams) => {
+  const date = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const wellCards = cards.filter((c) => c.column === "well");
+  const improveCards = cards.filter((c) => c.column === "improve");
+  const questionsCards = cards.filter((c) => c.column === "questions");
+
+  await Promise.all(
+    participants.map((participant) =>
+      resend.emails.send({
+        from: "Agile Retro <noreply@acme.gellify.dev>",
+        to: participant.email,
+        subject: `Retro recap – ${session.sprintName} – ${date}`,
+        react: RetroRecapEmail({
+          participantName: participant.displayName,
+          session,
+          date,
+          actionItems,
+          wellCards,
+          improveCards,
+          questionsCards,
+        }),
+      }),
+    ),
+  );
 };

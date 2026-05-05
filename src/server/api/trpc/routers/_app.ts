@@ -6,6 +6,7 @@ import {
   publicProcedure,
 } from "../init";
 import { organizationRouter } from "./organization";
+import { retroRouter } from "./retro";
 import { todoRouter } from "./todo";
 import { userRouter } from "./user";
 
@@ -18,6 +19,7 @@ export const appRouter = createTRPCRouter({
   user: userRouter,
   organization: organizationRouter,
   todo: todoRouter,
+  retro: retroRouter,
   health: publicProcedure.query(async ({ ctx: { db } }) => {
     try {
       await checkHealth(db);
