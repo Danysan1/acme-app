@@ -1,3 +1,4 @@
+import RetroRecapEmail from "@/emails/retro-recap-email";
 import ChangeEmailConfirmationEmail from "@/emails/change-email-confirmation-email";
 import DeleteAccountVerificationEmail from "@/emails/delete-account-verification-email";
 import EmailVerificationEmail from "@/emails/email-verification-email";
@@ -125,4 +126,42 @@ export const sendOrganizationInvitationEmail = async ({
       teamName,
     }),
   });
+};
+
+type RetroRecapEmailParams = {
+  participants: Array<{ displayName: string; email: string }>;
+  sprintName: string;
+  cards: Array<{ column: "well" | "improve" | "questions"; text: string; voteCount: number }>;
+  actionItems: Array<{ title: string; ownerName: string }>;
+};
+
+export const sendRetroRecapEmail = async ({
+  participants,
+  sprintName,
+  cards,
+  actionItems,
+}: RetroRecapEmailParams) => {
+  const date = new Date().toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
+  await Promise.all(
+    participants.map((participant) =>
+      resend.emails.send({
+        // MVP: sender address matches the existing acme domain — configurable at deploy time
+        from: "Agile Retro Platform <noreply@acme.gellify.dev>",
+        to: participant.email,
+        subject: `Retro recap — ${sprintName} — ${date}`,
+        react: RetroRecapEmail({
+          participantName: participant.displayName,
+          sprintName,
+          date,
+          actionItems,
+          cards,
+        }),
+      }),
+    ),
+  );
 };
