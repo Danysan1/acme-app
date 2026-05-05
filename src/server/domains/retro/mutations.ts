@@ -72,6 +72,23 @@ export async function createCardMutation(
   return card;
 }
 
+export async function updateCardMutation(
+  db: DBClient,
+  params: { cardId: string; participantId: string; text: string },
+) {
+  const [card] = await db
+    .update(retroFeedbackCardTable)
+    .set({ text: params.text })
+    .where(
+      and(
+        eq(retroFeedbackCardTable.id, params.cardId),
+        eq(retroFeedbackCardTable.participantId, params.participantId),
+      ),
+    )
+    .returning();
+  return card;
+}
+
 export async function deleteCardMutation(
   db: DBClient,
   params: { cardId: string; participantId: string },

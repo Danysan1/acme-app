@@ -3,9 +3,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { useTRPC } from "@/libs/trpc/client";
 import { ActionsPhase } from "./actions-phase";
+import { ClosedView } from "./closed-view";
 import { CollectingPhase } from "./collecting-phase";
 import { DiscussingPhase } from "./discussing-phase";
 import { PhaseIndicator } from "./phase-indicator";
@@ -52,7 +52,11 @@ export function RetroSession({ code }: RetroSessionProps) {
     }),
     enabled: identityResolved,
     // MVP: polling every 2s for real-time feel — no WebSockets in this MVP
-    refetchInterval: identityResolved ? 2000 : false,
+    refetchInterval: (query) => {
+      if (!identityResolved) return false;
+      if (query.state.data?.session.status === "closed") return false;
+      return 2000;
+    },
     refetchIntervalInBackground: false,
   });
 
@@ -90,7 +94,10 @@ export function RetroSession({ code }: RetroSessionProps) {
     return (
       <ClosedView
         sprintName={session.sprintName}
+        cards={cards}
         actionItems={actionItems}
+        participants={participants}
+        isFacilitator={isFacilitator}
         onBack={() => router.push(`/${locale}/retro`)}
       />
     );
@@ -177,12 +184,6 @@ export function RetroSession({ code }: RetroSessionProps) {
             isFacilitator={isFacilitator}
             code={code}
             facilitatorToken={facilitatorToken}
-            onClosed={() => {
-              toast.success(
-                "Session closed! Recap email sent to all participants.",
-              );
-              router.push(`/${locale}/retro`);
-            }}
           />
         )}
       </main>
@@ -248,6 +249,7 @@ function RetroJoinInline({
   const trpc = useTRPC();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const joinMutation = useMutation(
     trpc.retro.joinSession.mutationOptions({
@@ -255,17 +257,23 @@ function RetroJoinInline({
         localStorage.setItem(`retro_participant_${code}`, data.participantId);
         onJoined(data.participantId);
       },
-      onError: () => toast.error("Could not join session"),
+      onError: (error) => {
+        const msg = error.message ?? "";
+        if (msg.includes("closed")) {
+          setJoinError("This session has already ended.");
+        } else if (msg.includes("Name already in use")) {
+          setJoinError("This name is already taken. Please choose another.");
+        } else {
+          setJoinError("Session not found. Check the code and try again.");
+        }
+      },
     }),
   );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    joinMutation.mutate({
-      code,
-      displayName: name.trim(),
-      email: email.trim(),
-    });
+    setJoinError(null);
+    joinMutation.mutate({ code, displayName: name.trim(), email: email.trim() });
   }
 
   return (
@@ -297,8 +305,9 @@ function RetroJoinInline({
           <input
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => { setName(e.target.value); setJoinError(null); }}
             placeholder="Your name"
+            maxLength={50}
             className="w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#CD68C5]"
             style={{ background: "white", color: "#331141" }}
             required
@@ -312,6 +321,18 @@ function RetroJoinInline({
             style={{ background: "white", color: "#331141" }}
             required
           />
+          {joinError && (
+            <p
+              className="text-sm rounded-xl px-4 py-2.5"
+              style={{
+                background: "rgba(255,107,107,0.15)",
+                color: "#FF9A9A",
+                border: "1px solid rgba(255,107,107,0.3)",
+              }}
+            >
+              {joinError}
+            </p>
+          )}
           <button
             type="submit"
             disabled={joinMutation.isPending}
@@ -329,68 +350,6 @@ function RetroJoinInline({
             ← Back
           </button>
         </form>
-      </div>
-    </div>
-  );
-}
-
-function ClosedView({
-  sprintName,
-  actionItems,
-  onBack,
-}: {
-  sprintName: string;
-  actionItems: Array<{ id: string; title: string; ownerName: string }>;
-  onBack: () => void;
-}) {
-  return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4"
-      style={{ background: "#260B32" }}
-    >
-      <div className="text-center max-w-md">
-        <div
-          className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 text-3xl"
-          style={{ background: "rgba(48,255,226,0.15)" }}
-        >
-          ✓
-        </div>
-        <h2 className="text-white text-2xl font-medium mb-2">
-          Retro completed!
-        </h2>
-        <p className="text-sm mb-8" style={{ color: "#A159A1" }}>
-          {sprintName} · Recap email sent to all participants
-        </p>
-        {actionItems.length > 0 && (
-          <div className="text-left mb-8 space-y-2">
-            {actionItems.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl"
-                style={{ background: "rgba(255,255,255,0.06)" }}
-              >
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ background: "#30FFE2" }}
-                />
-                <span className="flex-1 text-sm" style={{ color: "#F2E3F2" }}>
-                  {item.title}
-                </span>
-                <span className="text-xs" style={{ color: "#A159A1" }}>
-                  {item.ownerName}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={onBack}
-          className="px-8 py-3 rounded-xl font-medium text-white transition-all hover:opacity-90"
-          style={{ background: "#822E7B" }}
-        >
-          Start a new retro
-        </button>
       </div>
     </div>
   );

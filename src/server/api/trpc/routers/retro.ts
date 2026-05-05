@@ -11,9 +11,9 @@ import {
   revealCards,
   startSession,
   submitCards,
+  updateCard,
   voteCard,
 } from "@/server/domains/retro/retro-service";
-import { sendRetroRecapEmail } from "@/server/services/email-service";
 import {
   addActionItemSchema,
   addCardSchema,
@@ -24,6 +24,7 @@ import {
   getSessionSchema,
   joinSessionSchema,
   submitCardsSchema,
+  updateCardSchema,
   voteCardSchema,
 } from "@/shared/validators/retro.schema";
 import { createTRPCRouter, publicProcedure } from "../init";
@@ -71,6 +72,12 @@ export const retroRouter = createTRPCRouter({
       return addCard(db, input);
     }),
 
+  updateCard: publicProcedure
+    .input(updateCardSchema)
+    .mutation(async ({ ctx: { db }, input }) => {
+      return updateCard(db, input);
+    }),
+
   deleteCard: publicProcedure
     .input(deleteCardSchema)
     .mutation(async ({ ctx: { db }, input }) => {
@@ -101,17 +108,11 @@ export const retroRouter = createTRPCRouter({
       return deleteActionItem(db, input);
     }),
 
+  // US-05: returns full session data so the client can build the mailto: recap link.
+  // No server-side email is sent — the facilitator opens their own email client.
   closeSession: publicProcedure
     .input(facilitatorActionSchema)
     .mutation(async ({ ctx: { db }, input }) => {
-      const result = await closeSession(db, input);
-      // Send recap email to all participants after closing
-      await sendRetroRecapEmail({
-        participants: result.participants,
-        sprintName: result.session.sprintName,
-        cards: result.cards,
-        actionItems: result.actionItems,
-      });
-      return { success: true };
+      return closeSession(db, input);
     }),
 });

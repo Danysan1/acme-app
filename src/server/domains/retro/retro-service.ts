@@ -13,6 +13,7 @@ import type {
   getSessionSchema,
   joinSessionSchema,
   submitCardsSchema,
+  updateCardSchema,
   voteCardSchema,
 } from "@/shared/validators/retro.schema";
 import {
@@ -24,6 +25,7 @@ import {
   deleteCardMutation,
   incrementVoteMutation,
   submitCardsMutation,
+  updateCardMutation,
   updateSessionStatusMutation,
 } from "./mutations";
 import {
@@ -68,6 +70,11 @@ export async function joinSession(
   }
   if (session.status === "closed") {
     throw new TRPCError({ code: "FORBIDDEN", message: "Session is closed" });
+  }
+
+  const existing = await getParticipantsBySessionIdQuery(db, session.id);
+  if (existing.some((p) => p.displayName.toLowerCase() === input.displayName.toLowerCase())) {
+    throw new TRPCError({ code: "CONFLICT", message: "Name already in use" });
   }
 
   const participant = await createParticipantMutation(db, {
@@ -205,6 +212,25 @@ export async function addCard(
     sessionId: session.id,
     participantId: input.participantId,
     column: input.column,
+    text: input.text,
+  });
+}
+
+export async function updateCard(
+  db: DBClient,
+  input: z.infer<typeof updateCardSchema>,
+) {
+  const session = await getSessionByCodeQuery(db, input.code);
+  if (!session) throw new TRPCError({ code: "NOT_FOUND" });
+  if (session.status !== "collecting") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Cards can only be edited during collection phase",
+    });
+  }
+  return updateCardMutation(db, {
+    cardId: input.cardId,
+    participantId: input.participantId,
     text: input.text,
   });
 }

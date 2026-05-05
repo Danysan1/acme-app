@@ -1,12 +1,12 @@
 import * as z from "zod";
 
 export const createSessionSchema = z.object({
-  sprintName: z.string().min(1).max(256),
+  sprintName: z.string().min(1).max(80),
 });
 
 export const joinSessionSchema = z.object({
   code: z.string().length(6),
-  displayName: z.string().min(1).max(256),
+  displayName: z.string().min(1).max(50),
   email: z.string().email(),
 });
 
@@ -24,7 +24,14 @@ export const addCardSchema = z.object({
   code: z.string().length(6),
   participantId: z.string().uuid(),
   column: z.enum(["well", "improve", "questions"]),
-  text: z.string().min(1).max(1000),
+  text: z.string().min(1).max(300),
+});
+
+export const updateCardSchema = z.object({
+  code: z.string().length(6),
+  participantId: z.string().uuid(),
+  cardId: z.string().uuid(),
+  text: z.string().min(1).max(300),
 });
 
 export const deleteCardSchema = z.object({
@@ -46,8 +53,8 @@ export const voteCardSchema = z.object({
 export const addActionItemSchema = z.object({
   code: z.string().length(6),
   facilitatorToken: z.string().min(1),
-  title: z.string().min(1).max(512),
-  ownerName: z.string().min(1).max(256),
+  title: z.string().min(1).max(200),
+  ownerName: z.string().min(1).max(50),
 });
 
 export const deleteActionItemSchema = z.object({

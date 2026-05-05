@@ -16,7 +16,7 @@ export function RetroLanding() {
   const [joinCode, setJoinCode] = useState("");
   const [joinName, setJoinName] = useState("");
   const [joinEmail, setJoinEmail] = useState("");
-  const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const createMutation = useMutation(
     trpc.retro.createSession.mutationOptions({
@@ -26,7 +26,7 @@ export function RetroLanding() {
           `retro_facilitator_${data.code}`,
           data.facilitatorToken,
         );
-        setCreatedCode(data.code);
+        router.push(`/${locale}/retro/${data.code}`);
       },
       onError: () => toast.error("Failed to create session"),
     }),
@@ -39,7 +39,16 @@ export function RetroLanding() {
         localStorage.setItem(`retro_participant_${code}`, data.participantId);
         router.push(`/${locale}/retro/${code}`);
       },
-      onError: () => toast.error("Session not found or already closed"),
+      onError: (error) => {
+        const msg = error.message ?? "";
+        if (msg.includes("closed")) {
+          setJoinError("This session has already ended.");
+        } else if (msg.includes("Name already in use")) {
+          setJoinError("This name is already taken in this session. Please choose another.");
+        } else {
+          setJoinError("Session not found. Check the code and try again.");
+        }
+      },
     }),
   );
 
@@ -51,16 +60,13 @@ export function RetroLanding() {
 
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
+    setJoinError(null);
     if (!joinCode.trim() || !joinName.trim() || !joinEmail.trim()) return;
     joinMutation.mutate({
       code: joinCode.trim().toUpperCase(),
       displayName: joinName.trim(),
       email: joinEmail.trim(),
     });
-  }
-
-  function goToSession() {
-    if (createdCode) router.push(`/${locale}/retro/${createdCode}`);
   }
 
   return (
@@ -107,56 +113,35 @@ export function RetroLanding() {
             Start a new session for your team
           </p>
 
-          {createdCode ? (
-            <div className="text-center">
-              <p className="text-[#F2E3F2] text-sm mb-3">
-                Share this code with your team
-              </p>
-              <div
-                className="text-white text-5xl font-medium tracking-[0.3em] mb-6 py-5 rounded-xl"
-                style={{ background: "rgba(255,255,255,0.1)" }}
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div>
+              <label
+                htmlFor="sprint-name"
+                className="text-[#F2E3F2] text-sm font-medium block mb-1.5"
               >
-                {createdCode}
-              </div>
-              <button
-                type="button"
-                onClick={goToSession}
-                className="w-full py-3 rounded-xl font-medium text-white transition-all hover:opacity-90 active:scale-95"
-                style={{ background: "#822E7B" }}
-              >
-                Enter session →
-              </button>
+                Sprint name
+              </label>
+              <input
+                id="sprint-name"
+                type="text"
+                value={sprintName}
+                onChange={(e) => setSprintName(e.target.value)}
+                placeholder="e.g. Sprint 42"
+                maxLength={80}
+                className="w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#CD68C5]"
+                style={{ background: "white", color: "#331141" }}
+                required
+              />
             </div>
-          ) : (
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="sprint-name"
-                  className="text-[#F2E3F2] text-sm font-medium block mb-1.5"
-                >
-                  Sprint name
-                </label>
-                <input
-                  id="sprint-name"
-                  type="text"
-                  value={sprintName}
-                  onChange={(e) => setSprintName(e.target.value)}
-                  placeholder="e.g. Sprint 42"
-                  className="w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#CD68C5]"
-                  style={{ background: "white", color: "#331141" }}
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={createMutation.isPending}
-                className="w-full py-3 rounded-xl font-medium text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
-                style={{ background: "#822E7B" }}
-              >
-                {createMutation.isPending ? "Creating…" : "Create session"}
-              </button>
-            </form>
-          )}
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="w-full py-3 rounded-xl font-medium text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
+              style={{ background: "#822E7B" }}
+            >
+              {createMutation.isPending ? "Creating…" : "Create session"}
+            </button>
+          </form>
         </div>
 
         {/* Join Session */}
@@ -185,7 +170,10 @@ export function RetroLanding() {
                 id="join-code"
                 type="text"
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  setJoinCode(e.target.value.toUpperCase());
+                  setJoinError(null);
+                }}
                 placeholder="ABC123"
                 maxLength={6}
                 className="w-full px-4 py-3 rounded-xl text-sm font-medium tracking-widest uppercase outline-none focus:ring-2 focus:ring-[#CD68C5]"
@@ -204,8 +192,12 @@ export function RetroLanding() {
                 id="join-name"
                 type="text"
                 value={joinName}
-                onChange={(e) => setJoinName(e.target.value)}
+                onChange={(e) => {
+                  setJoinName(e.target.value);
+                  setJoinError(null);
+                }}
                 placeholder="Anna Rossi"
+                maxLength={50}
                 className="w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#CD68C5]"
                 style={{ background: "white", color: "#331141" }}
                 required
@@ -229,6 +221,20 @@ export function RetroLanding() {
                 required
               />
             </div>
+
+            {joinError && (
+              <p
+                className="text-sm rounded-xl px-4 py-2.5"
+                style={{
+                  background: "rgba(255,107,107,0.15)",
+                  color: "#FF9A9A",
+                  border: "1px solid rgba(255,107,107,0.3)",
+                }}
+              >
+                {joinError}
+              </p>
+            )}
+
             <button
               type="submit"
               disabled={joinMutation.isPending}

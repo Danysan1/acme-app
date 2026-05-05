@@ -1,9 +1,10 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useTRPC } from "@/libs/trpc/client";
+import { ConfirmDialog } from "./confirm-dialog";
 
 type Card = {
   id: string;
@@ -58,17 +59,28 @@ export function CollectingPhase({
       queryKey: trpc.retro.getSession.queryKey({ code }),
     });
 
-  const [inputs, setInputs] = useState({
-    well: "",
-    improve: "",
-    questions: "",
-  });
-  const [submitted, setSubmitted] = useState(false);
+  const [inputs, setInputs] = useState({ well: "", improve: "", questions: "" });
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingCardId) editInputRef.current?.focus();
+  }, [editingCardId]);
+
 
   const addCardMutation = useMutation(
     trpc.retro.addCard.mutationOptions({
       onSuccess: invalidate,
       onError: () => toast.error("Failed to add card"),
+    }),
+  );
+
+  const updateCardMutation = useMutation(
+    trpc.retro.updateCard.mutationOptions({
+      onSuccess: invalidate,
+      onError: () => toast.error("Failed to update card"),
     }),
   );
 
@@ -81,10 +93,7 @@ export function CollectingPhase({
 
   const submitMutation = useMutation(
     trpc.retro.submitCards.mutationOptions({
-      onSuccess: () => {
-        setSubmitted(true);
-        invalidate();
-      },
+      onSuccess: invalidate,
       onError: () => toast.error("Failed to submit"),
     }),
   );
@@ -101,6 +110,26 @@ export function CollectingPhase({
     if (!text) return;
     addCardMutation.mutate({ code, participantId, column, text });
     setInputs((prev) => ({ ...prev, [column]: "" }));
+  }
+
+  function handleEditStart(card: Card) {
+    setEditingCardId(card.id);
+    setEditingText(card.text);
+  }
+
+  function handleEditSave() {
+    if (!editingCardId) return;
+    const text = editingText.trim();
+    if (text) {
+      updateCardMutation.mutate({ code, participantId, cardId: editingCardId, text });
+    }
+    setEditingCardId(null);
+    setEditingText("");
+  }
+
+  function handleEditKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") { e.preventDefault(); handleEditSave(); }
+    if (e.key === "Escape") { setEditingCardId(null); setEditingText(""); }
   }
 
   const doneCount = participants.filter((p) => p.submitted).length;
@@ -182,11 +211,22 @@ export function CollectingPhase({
 
   // Participant view
   const isSubmitted =
-    submitted ||
     participants.find((p) => p.id === participantId)?.submitted === true;
 
   return (
     <div>
+      <ConfirmDialog
+        open={showSubmitDialog}
+        title="Submit your feedback?"
+        description="You won't be able to edit your cards after this."
+        confirmLabel="Submit"
+        onConfirm={() => {
+          setShowSubmitDialog(false);
+          submitMutation.mutate({ code, participantId });
+        }}
+        onCancel={() => setShowSubmitDialog(false)}
+      />
+
       <div className="text-center mb-6">
         <h2 className="text-xl font-medium mb-1" style={{ color: "#260B32" }}>
           Write your feedback
@@ -215,16 +255,13 @@ export function CollectingPhase({
                 </span>
                 <span
                   className="ml-auto text-xs px-2 py-0.5 rounded-full"
-                  style={{
-                    background: "rgba(255,255,255,0.2)",
-                    color: "white",
-                  }}
+                  style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
                 >
                   {colCards.length}
                 </span>
               </div>
 
-              <div className="p-3 space-y-2 min-h-[120px]">
+              <div className="p-3 space-y-2 min-h-30">
                 {colCards.map((card) => (
                   <div
                     key={card.id}
@@ -235,22 +272,50 @@ export function CollectingPhase({
                       border: "1px solid #F2E3F2",
                     }}
                   >
-                    {card.text}
-                    {!isSubmitted && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          deleteCardMutation.mutate({
-                            code,
-                            participantId,
-                            cardId: card.id,
-                          })
-                        }
-                        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 w-5 h-5 rounded-full flex items-center justify-center text-xs transition-opacity"
-                        style={{ background: "#CD68C5", color: "white" }}
-                      >
-                        ×
-                      </button>
+                    {editingCardId === card.id ? (
+                      <input
+                        ref={editInputRef}
+                        type="text"
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onKeyDown={handleEditKeyDown}
+                        onBlur={handleEditSave}
+                        maxLength={300}
+                        className="w-full bg-transparent outline-none text-sm"
+                        style={{ color: "#331141" }}
+                      />
+                    ) : (
+                      <>
+                        <span className="pr-12">{card.text}</span>
+                        {!isSubmitted && (
+                          <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={() => handleEditStart(card)}
+                              className="w-5 h-5 rounded-full flex items-center justify-center text-xs"
+                              style={{ background: "#F2E3F2", color: "#822E7B" }}
+                              title="Edit"
+                            >
+                              ✎
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteCardMutation.mutate({
+                                  code,
+                                  participantId,
+                                  cardId: card.id,
+                                })
+                              }
+                              className="w-5 h-5 rounded-full flex items-center justify-center text-xs"
+                              style={{ background: "#CD68C5", color: "white" }}
+                              title="Delete"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ))}
@@ -262,15 +327,13 @@ export function CollectingPhase({
                     type="text"
                     value={inputs[col.key]}
                     onChange={(e) =>
-                      setInputs((prev) => ({
-                        ...prev,
-                        [col.key]: e.target.value,
-                      }))
+                      setInputs((prev) => ({ ...prev, [col.key]: e.target.value }))
                     }
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleAddCard(col.key);
                     }}
                     placeholder="Add a card…"
+                    maxLength={300}
                     className="flex-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#CD68C5]"
                     style={{
                       background: "#F9F4F9",
@@ -298,8 +361,8 @@ export function CollectingPhase({
         <div className="flex justify-center">
           <button
             type="button"
-            onClick={() => submitMutation.mutate({ code, participantId })}
-            disabled={submitMutation.isPending || cards.length === 0}
+            onClick={() => setShowSubmitDialog(true)}
+            disabled={submitMutation.isPending}
             className="px-10 py-3 rounded-xl font-medium text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
             style={{ background: "#822E7B" }}
           >

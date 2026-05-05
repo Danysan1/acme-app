@@ -1,8 +1,10 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useTRPC } from "@/libs/trpc/client";
+import { ConfirmDialog } from "./confirm-dialog";
 
 type Card = {
   id: string;
@@ -47,6 +49,20 @@ export function DiscussingPhase({
       queryKey: trpc.retro.getSession.queryKey({ code }),
     });
 
+  const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
+
+  // Stable random order per card — assigned once, preserved across re-renders (polls update voteCount)
+  const shuffleOrderRef = useRef<Map<string, number>>(new Map());
+  function getShuffledColumn(colCards: Card[]) {
+    const order = shuffleOrderRef.current;
+    for (const card of colCards) {
+      if (!order.has(card.id)) order.set(card.id, Math.random());
+    }
+    return [...colCards].sort(
+      (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+    );
+  }
+
   const voteMutation = useMutation(
     trpc.retro.voteCard.mutationOptions({
       onSuccess: invalidate,
@@ -65,6 +81,18 @@ export function DiscussingPhase({
 
   return (
     <div>
+      <ConfirmDialog
+        open={showAdvanceDialog}
+        title="Move to action planning?"
+        description="Votes will be locked. No more voting after this."
+        confirmLabel="Go to actions"
+        onConfirm={() => {
+          setShowAdvanceDialog(false);
+          advanceMutation.mutate({ code, facilitatorToken });
+        }}
+        onCancel={() => setShowAdvanceDialog(false)}
+      />
+
       <div className="text-center mb-6">
         <h2 className="text-xl font-medium mb-1" style={{ color: "#260B32" }}>
           Group discussion
@@ -77,9 +105,9 @@ export function DiscussingPhase({
 
       <div className="grid md:grid-cols-3 gap-4 mb-6">
         {COLUMNS.map((col) => {
-          const colCards = cards
-            .filter((c) => c.column === col.key)
-            .sort((a, b) => b.voteCount - a.voteCount);
+          const colCards = getShuffledColumn(
+            cards.filter((c) => c.column === col.key),
+          );
 
           return (
             <div
@@ -97,16 +125,13 @@ export function DiscussingPhase({
                 </span>
                 <span
                   className="ml-auto text-xs px-2 py-0.5 rounded-full"
-                  style={{
-                    background: "rgba(255,255,255,0.2)",
-                    color: "white",
-                  }}
+                  style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
                 >
                   {colCards.length}
                 </span>
               </div>
 
-              <div className="p-3 space-y-2 min-h-[120px]">
+              <div className="p-3 space-y-2 min-h-30">
                 {colCards.length === 0 && (
                   <p
                     className="text-center text-xs py-6"
@@ -124,20 +149,22 @@ export function DiscussingPhase({
                       border: "1px solid #F2E3F2",
                     }}
                   >
-                    <p
-                      className="mb-2 leading-snug"
-                      style={{ color: "#331141" }}
-                    >
+                    <p className="mb-2 leading-snug" style={{ color: "#331141" }}>
                       {card.text}
                     </p>
                     <div className="flex items-center justify-between">
-                      <span
-                        className="text-xs px-2.5 py-0.5 rounded-full font-medium"
-                        style={{ background: "#F2E3F2", color: "#5E2460" }}
-                      >
-                        {card.voteCount}{" "}
-                        {card.voteCount === 1 ? "vote" : "votes"}
-                      </span>
+                      {/* Vote pill — only shown when at least one vote (US-03 AC3) */}
+                      {card.voteCount > 0 ? (
+                        <span
+                          className="text-xs px-2.5 py-0.5 rounded-full font-medium"
+                          style={{ background: "#F2E3F2", color: "#5E2460" }}
+                        >
+                          {card.voteCount}{" "}
+                          {card.voteCount === 1 ? "vote" : "votes"}
+                        </span>
+                      ) : (
+                        <span />
+                      )}
                       <button
                         type="button"
                         onClick={() =>
@@ -165,12 +192,12 @@ export function DiscussingPhase({
         {isFacilitator && (
           <button
             type="button"
-            onClick={() => advanceMutation.mutate({ code, facilitatorToken })}
+            onClick={() => setShowAdvanceDialog(true)}
             disabled={advanceMutation.isPending}
             className="px-8 py-3 rounded-xl font-medium text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
             style={{ background: "#822E7B" }}
           >
-            {advanceMutation.isPending ? "Advancing…" : "Go to actions →"}
+            Go to actions →
           </button>
         )}
       </div>

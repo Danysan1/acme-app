@@ -38,7 +38,7 @@ export function WaitingRoom({
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="text-center mb-10">
+      <div className="text-center mb-8">
         <div
           className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center text-3xl"
           style={{ background: "#F2E3F2", border: "3px solid #CD68C5" }}
@@ -51,9 +51,27 @@ export function WaitingRoom({
         <p className="text-sm" style={{ color: "#A159A1" }}>
           {isFacilitator
             ? "Waiting for participants to join. Start when you're ready."
-            : "Waiting for the facilitator to start the session…"}
+            : "Waiting for the session to start…"}
         </p>
       </div>
+
+      {/* Session code — shown prominently so the facilitator can share it */}
+      {isFacilitator && (
+        <div
+          className="rounded-2xl p-5 mb-5 text-center"
+          style={{ background: "white", border: "1px solid #F2E3F2" }}
+        >
+          <p className="text-xs font-medium uppercase tracking-widest mb-2" style={{ color: "#A159A1" }}>
+            Share this code with your team
+          </p>
+          <div
+            className="text-4xl font-medium tracking-[0.3em] py-3 px-4 rounded-xl inline-block"
+            style={{ background: "#F2E3F2", color: "#260B32" }}
+          >
+            {code}
+          </div>
+        </div>
+      )}
 
       {/* Participant list */}
       <div

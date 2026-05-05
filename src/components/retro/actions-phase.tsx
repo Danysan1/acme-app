@@ -1,9 +1,10 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useTRPC } from "@/libs/trpc/client";
+import { ConfirmDialog } from "./confirm-dialog";
 
 type Card = {
   id: string;
@@ -36,7 +37,6 @@ type ActionsPhaseProps = {
   isFacilitator: boolean;
   code: string;
   facilitatorToken: string;
-  onClosed: () => void;
 };
 
 export function ActionsPhase({
@@ -45,7 +45,6 @@ export function ActionsPhase({
   isFacilitator,
   code,
   facilitatorToken,
-  onClosed,
 }: ActionsPhaseProps) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -56,6 +55,8 @@ export function ActionsPhase({
 
   const [actionTitle, setActionTitle] = useState("");
   const [actionOwner, setActionOwner] = useState("");
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const whatInputRef = useRef<HTMLInputElement>(null);
 
   const addActionMutation = useMutation(
     trpc.retro.addActionItem.mutationOptions({
@@ -63,6 +64,7 @@ export function ActionsPhase({
         setActionTitle("");
         setActionOwner("");
         invalidate();
+        whatInputRef.current?.focus();
       },
       onError: () => toast.error("Failed to add action item"),
     }),
@@ -77,11 +79,12 @@ export function ActionsPhase({
 
   const closeMutation = useMutation(
     trpc.retro.closeSession.mutationOptions({
-      onSuccess: () => onClosed(),
+      onSuccess: () => invalidate(),
       onError: () => toast.error("Failed to close session"),
     }),
   );
 
+  // Sort by votes desc; equal votes preserve original (insertion) order
   const sortedCards = [...cards].sort((a, b) => b.voteCount - a.voteCount);
 
   function handleAddAction(e: React.FormEvent) {
@@ -97,6 +100,18 @@ export function ActionsPhase({
 
   return (
     <div className="grid lg:grid-cols-2 gap-6 max-w-6xl mx-auto">
+      <ConfirmDialog
+        open={showCloseDialog}
+        title="Close the session?"
+        description="This will open your email client with the recap pre-filled. This cannot be undone."
+        confirmLabel="Close & send recap"
+        onConfirm={() => {
+          setShowCloseDialog(false);
+          closeMutation.mutate({ code, facilitatorToken });
+        }}
+        onCancel={() => setShowCloseDialog(false)}
+      />
+
       {/* Left: cards sorted by votes */}
       <div>
         <h2 className="text-lg font-medium mb-4" style={{ color: "#260B32" }}>
@@ -154,10 +169,12 @@ export function ActionsPhase({
             </p>
             <div className="space-y-2 mb-3">
               <input
+                ref={whatInputRef}
                 type="text"
                 value={actionTitle}
                 onChange={(e) => setActionTitle(e.target.value)}
                 placeholder="What needs to be done?"
+                maxLength={200}
                 className="w-full px-3 py-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#CD68C5]"
                 style={{
                   background: "#F9F4F9",
@@ -171,6 +188,7 @@ export function ActionsPhase({
                 value={actionOwner}
                 onChange={(e) => setActionOwner(e.target.value)}
                 placeholder="Who is responsible?"
+                maxLength={50}
                 className="w-full px-3 py-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#CD68C5]"
                 style={{
                   background: "#F9F4F9",
@@ -250,14 +268,14 @@ export function ActionsPhase({
         {isFacilitator && (
           <button
             type="button"
-            onClick={() => closeMutation.mutate({ code, facilitatorToken })}
+            onClick={() => setShowCloseDialog(true)}
             disabled={closeMutation.isPending}
             className="w-full py-4 rounded-xl font-medium text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
             style={{ background: "#260B32" }}
           >
             {closeMutation.isPending
-              ? "Sending recap…"
-              : "Close session & send recap ✉"}
+              ? "Closing…"
+              : "Close session and send recap ✉"}
           </button>
         )}
       </div>
